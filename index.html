@@ -39,6 +39,7 @@
                 Entrar com o Google
             </button>
         </div>
+        <div id="error-message" class="mt-4 text-red-600"></div>
     </div>
 
     <!-- Conteúdo Principal do App -->
@@ -69,9 +70,9 @@
 
     <!-- Módulo JavaScript -->
     <script type="module">
-        // CORREÇÃO: Adicionado 'setPersistence' e 'browserLocalPersistence'
+        // CORREÇÃO: Removido getRedirectResult, voltando para signInWithPopup
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -87,6 +88,7 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
+        auth.languageCode = 'pt';
 
         let currentUser = null;
         let currentListId = null;
@@ -104,50 +106,64 @@
         const appView = document.getElementById('app-view');
         const loginBtn = document.getElementById('login-btn');
         const userInfoDiv = document.getElementById('user-info');
+        const errorMessageDiv = document.getElementById('error-message');
 
-        // --- LÓGICA DE AUTENTICAÇÃO ---
-        async function mainAuth() {
-            // CORREÇÃO: Define a persistência para ser mais robusta em ambientes de produção
-            await setPersistence(auth, browserLocalPersistence);
+        // --- LÓGICA DE AUTENTICAÇÃO (POPUP) ---
+        async function main() {
+            try {
+                await setPersistence(auth, browserLocalPersistence);
+                console.log("Persistência definida para 'local'.");
 
-            loginBtn.addEventListener('click', () => {
-                signInWithRedirect(auth, provider);
-            });
-
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    currentUser = user;
-                    loginView.style.display = 'none';
-                    appView.style.display = 'block';
-                    userInfoDiv.innerHTML = `
-                        <span class="font-semibold truncate">${user.displayName}</span>
-                        <img src="${user.photoURL}" alt="Foto de perfil" class="w-8 h-8 rounded-full flex-shrink-0">
-                        <button id="logout-btn" class="text-sm text-gray-500 hover:text-red-600 transition-colors flex-shrink-0">Sair</button>
-                    `;
-                    document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
-                    initializeAppLogic();
-                } else {
-                    currentUser = null;
-                    loginView.style.display = 'flex';
-                    loginContent.style.display = 'block';
-                    loadingAuth.style.display = 'none';
-                    appView.style.display = 'none';
-                    userInfoDiv.innerHTML = '';
-                }
-            });
-
-            getRedirectResult(auth)
-                .then((result) => {
-                    if (result) {
-                        loginContent.style.display = 'none';
-                        loadingAuth.style.display = 'block';
+                onAuthStateChanged(auth, (user) => {
+                    console.log("onAuthStateChanged disparado. Usuário:", user ? user.displayName : 'Nenhum');
+                    if (user) {
+                        currentUser = user;
+                        loginView.style.display = 'none';
+                        appView.style.display = 'block';
+                        userInfoDiv.innerHTML = `
+                            <span class="font-semibold truncate">${user.displayName}</span>
+                            <img src="${user.photoURL}" alt="Foto de perfil" class="w-8 h-8 rounded-full flex-shrink-0">
+                            <button id="logout-btn" class="text-sm text-gray-500 hover:text-red-600 transition-colors flex-shrink-0">Sair</button>
+                        `;
+                        document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+                        initializeAppLogic();
+                    } else {
+                        currentUser = null;
+                        loadingAuth.style.display = 'none';
+                        loginContent.style.display = 'block';
+                        loginView.style.display = 'flex';
+                        appView.style.display = 'none';
+                        userInfoDiv.innerHTML = '';
                     }
-                }).catch((error) => {
-                    console.error("Erro ao obter resultado do redirecionamento:", error);
                 });
+
+                loginBtn.addEventListener('click', () => {
+                    console.log("Botão de login clicado. Abrindo popup...");
+                    signInWithPopup(auth, provider)
+                        .then((result) => {
+                            // O onAuthStateChanged vai cuidar de atualizar a UI.
+                            console.log("Login com popup bem-sucedido:", result.user.displayName);
+                        })
+                        .catch((error) => {
+                            console.error("Erro no login com popup:", error);
+                            if (error.code === 'auth/unauthorized-domain') {
+                                errorMessageDiv.textContent = "Erro: Domínio não autorizado. Verifique a configuração no Firebase.";
+                            } else {
+                                errorMessageDiv.textContent = "Não foi possível fazer o login. Tente novamente.";
+                            }
+                        });
+                });
+
+            } catch (error) {
+                console.error("Erro CRÍTICO na inicialização da autenticação:", error);
+                loadingAuth.style.display = 'none';
+                loginContent.style.display = 'block';
+                errorMessageDiv.textContent = "Ocorreu um erro ao inicializar o app. Tente recarregar a página.";
+            }
         }
 
-        mainAuth(); // Inicia a lógica de autenticação
+        main();
+
 
         function initializeAppLogic() {
             document.querySelectorAll('.tab-btn').forEach(tab => tab.addEventListener('click', () => loadList(tab.dataset.list)));
