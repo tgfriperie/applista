@@ -27,12 +27,18 @@
 
     <!-- Tela de Login -->
     <div id="login-view" class="flex flex-col items-center justify-center h-screen text-center p-4">
-        <h1 class="text-4xl font-bold text-gray-900">Nossa Lista de Compras</h1>
-        <p class="text-gray-600 mt-2 mb-8">Faça login para começar a organizar.</p>
-        <button id="login-btn" class="bg-white px-6 py-3 rounded-lg shadow-md font-semibold text-gray-700 flex items-center hover:bg-gray-50 transition-colors">
-            <svg class="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#34A853" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" transform="rotate(90 24 24)"></path><path fill="#FBBC05" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" transform="rotate(180 24 24)"></path><path fill="#EA4335" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" transform="rotate(-90 24 24)"></path></svg>
-            Entrar com o Google
-        </button>
+        <div id="loading-auth" class="hidden">
+             <h1 class="text-2xl font-bold text-gray-900">Verificando login...</h1>
+             <p class="text-gray-600 mt-2">Aguarde um momento.</p>
+        </div>
+        <div id="login-content">
+            <h1 class="text-4xl font-bold text-gray-900">Nossa Lista de Compras</h1>
+            <p class="text-gray-600 mt-2 mb-8">Faça login para começar a organizar.</p>
+            <button id="login-btn" class="bg-white px-6 py-3 rounded-lg shadow-md font-semibold text-gray-700 flex items-center hover:bg-gray-50 transition-colors">
+                <svg class="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#34A853" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" transform="rotate(90 24 24)"></path><path fill="#FBBC05" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" transform="rotate(180 24 24)"></path><path fill="#EA4335" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" transform="rotate(-90 24 24)"></path></svg>
+                Entrar com o Google
+            </button>
+        </div>
     </div>
 
     <!-- Conteúdo Principal do App -->
@@ -63,8 +69,9 @@
 
     <!-- Módulo JavaScript -->
     <script type="module">
+        // CORREÇÃO: Adicionado 'getRedirectResult'
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -92,16 +99,21 @@
         };
 
         const loginView = document.getElementById('login-view');
+        const loginContent = document.getElementById('login-content');
+        const loadingAuth = document.getElementById('loading-auth');
         const appView = document.getElementById('app-view');
         const loginBtn = document.getElementById('login-btn');
         const userInfoDiv = document.getElementById('user-info');
 
+        // CORREÇÃO: Usando signInWithRedirect
         loginBtn.addEventListener('click', () => {
-            signInWithPopup(auth, provider).catch(error => console.error("Erro no login com Google:", error));
+            signInWithRedirect(auth, provider);
         });
 
+        // --- LÓGICA DE AUTENTICAÇÃO ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
+                // Usuário está logado
                 currentUser = user;
                 loginView.style.display = 'none';
                 appView.style.display = 'block';
@@ -113,12 +125,29 @@
                 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
                 initializeAppLogic();
             } else {
+                // Usuário está deslogado
                 currentUser = null;
                 loginView.style.display = 'flex';
+                loginContent.style.display = 'block';
+                loadingAuth.style.display = 'none';
                 appView.style.display = 'none';
                 userInfoDiv.innerHTML = '';
             }
         });
+
+        // CORREÇÃO: Checa o resultado do redirecionamento ao carregar a página
+        getRedirectResult(auth)
+            .then((result) => {
+                if (result) {
+                    // Se houver um resultado, mostra a tela de carregamento
+                    // O onAuthStateChanged vai cuidar do resto
+                    loginContent.style.display = 'none';
+                    loadingAuth.style.display = 'block';
+                }
+            }).catch((error) => {
+                console.error("Erro ao obter resultado do redirecionamento:", error);
+            });
+
 
         function initializeAppLogic() {
             document.querySelectorAll('.tab-btn').forEach(tab => tab.addEventListener('click', () => loadList(tab.dataset.list)));
