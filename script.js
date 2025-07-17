@@ -1,7 +1,7 @@
 // Importações do Firebase SDK
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, addDoc, deleteDoc, serverTimestamp, writeBatch, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, addDoc, deleteDoc, serverTimestamp, writeBatch, orderBy, Timestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Configuração do Firebase
 const firebaseConfig = {
@@ -23,7 +23,7 @@ auth.languageCode = 'pt';
 // Variáveis Globais
 let currentUser = null;
 let currentListId = null;
-let unsubscribeFromList = null; 
+let unsubscribeFromList = null;
 let allUserLists = [];
 
 // Elementos da UI
@@ -53,7 +53,8 @@ setPersistence(auth, browserLocalPersistence).then(() => {
             appView.style.display = 'block';
             userInfoDiv.innerHTML = `<span class="font-semibold truncate">${user.displayName}</span><img src="${user.photoURL}" alt="Foto de perfil" class="w-8 h-8 rounded-full flex-shrink-0"><button id="logout-btn" class="text-sm text-gray-500 hover:text-red-600 transition-colors flex-shrink-0">Sair</button>`;
             document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
-            await setupDefaultLists();
+            
+            await setupGlobalDefaultLists();
             initializeAppLogic();
         } else {
             currentUser = null;
@@ -65,44 +66,41 @@ setPersistence(auth, browserLocalPersistence).then(() => {
 });
 
 // --- LÓGICA PRINCIPAL DO APP ---
-async function setupDefaultLists() {
-    const defaultLists = [
-        { id: 'mercado', nome: 'Mercado', categorias: [ { nomeCategoria: "Mercearia", itens: [] }, { nomeCategoria: "Hortifruti", itens: [] }, { nomeCategoria: "Açougue e Frios", itens: [] }, { nomeCategoria: "Produtos de Limpeza", itens: [] }, { nomeCategoria: "Higiene Pessoal", itens: [] } ] },
-        { id: 'casa', nome: 'Casa', categorias: [ { nomeCategoria: "Cozinha", itens: [] }, { nomeCategoria: "Quarto", itens: [] }, { nomeCategoria: "Sala", itens: [] }, { nomeCategoria: "Banheiro", itens: [] }, { nomeCategoria: "Escritório", itens: [] } ] },
-        { id: 'roupas', nome: 'Roupas', categorias: [ { nomeCategoria: "Giovanna", itens: [] }, { nomeCategoria: "Tales", itens: [] } ] }
-    ];
+async function setupGlobalDefaultLists() {
+    const defaultListsQuery = query(collection(db, "user_lists"), where("isDefault", "==", true));
+    const querySnapshot = await getDocs(defaultListsQuery);
 
-    const batch = writeBatch(db);
-    let hasChanges = false;
+    if (querySnapshot.empty) {
+        const defaultLists = [
+            { id: 'mercado', nome: 'Mercado', categorias: [ { nomeCategoria: "Mercearia", itens: [] }, { nomeCategoria: "Hortifruti", itens: [] }, { nomeCategoria: "Açougue e Frios", itens: [] }, { nomeCategoria: "Produtos de Limpeza", itens: [] }, { nomeCategoria: "Higiene Pessoal", itens: [] } ] },
+            { id: 'casa', nome: 'Casa', categorias: [ { nomeCategoria: "Cozinha", itens: [] }, { nomeCategoria: "Quarto", itens: [] }, { nomeCategoria: "Sala", itens: [] }, { nomeCategoria: "Banheiro", itens: [] }, { nomeCategoria: "Escritório", itens: [] } ] },
+            { id: 'roupas', nome: 'Roupas', categorias: [ { nomeCategoria: "Giovanna", itens: [] }, { nomeCategoria: "Tales", itens: [] } ] }
+        ];
 
-    for (const list of defaultLists) {
-        const listRef = doc(db, "user_lists", `${currentUser.uid}_${list.id}`);
-        const docSnap = await getDoc(listRef);
-        if (!docSnap.exists()) {
-            hasChanges = true;
+        const batch = writeBatch(db);
+        for (const list of defaultLists) {
+            const listRef = doc(db, "user_lists", list.id);
             batch.set(listRef, {
                 nome: list.nome,
                 criadoEm: serverTimestamp(),
-                criadoPor: { uid: currentUser.uid, nome: currentUser.displayName },
-                membros: [currentUser.uid],
+                criadoPor: { uid: "system", nome: "Sistema" },
                 categorias: list.categorias,
                 isDefault: true
             });
         }
+        await batch.commit();
     }
-    if (hasChanges) await batch.commit();
 }
 
 function initializeAppLogic() {
     cancelDeleteBtn.addEventListener('click', () => modal.style.display = 'none');
-    
-    // CORREÇÃO: Adiciona os listeners dos formulários aqui, uma única vez.
+
     appView.addEventListener('submit', (e) => {
         if (e.target.id === 'add-category-form') handleAddCategory(e);
         if (e.target.id === 'add-item-form') handleAddItem(e);
     });
 
-    const q = query(collection(db, "user_lists"), where("membros", "array-contains", currentUser.uid), orderBy("criadoEm"));
+    const q = query(collection(db, "user_lists"), orderBy("criadoEm"));
     onSnapshot(q, (snapshot) => {
         allUserLists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderNavigation();
@@ -206,7 +204,7 @@ async function loadHistory() {
     mainTitle.textContent = 'Histórico de Compras';
     
     listContainer.innerHTML = `<p class="text-gray-500 p-4 text-center">Carregando histórico...</p>`;
-    const historyQuery = query(collection(db, "historico"), where("membros", "array-contains", currentUser.uid), orderBy("compradoEm", "desc"));
+    const historyQuery = query(collection(db, "historico"), orderBy("compradoEm", "desc"));
     unsubscribeFromList = onSnapshot(historyQuery, (querySnapshot) => {
         const historyItems = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderHistoryData(historyItems);
@@ -399,7 +397,6 @@ async function handleCreateList(e) {
         nome: listName,
         criadoEm: serverTimestamp(),
         criadoPor: { uid: currentUser.uid, nome: currentUser.displayName },
-        membros: [currentUser.uid],
         categorias: [],
         isDefault: false
     });
@@ -460,8 +457,7 @@ async function purchaseItem(catIndex, itemIndex) {
         compradoEm: Timestamp.fromDate(new Date()),
         listaOriginal: currentListId,
         listaOriginalNome: data.nome,
-        categoriaOriginal: data.categorias[catIndex].nomeCategoria,
-        membros: data.membros
+        categoriaOriginal: data.categorias[catIndex].nomeCategoria
     };
 
     data.categorias[catIndex].itens.splice(itemIndex, 1);
@@ -484,11 +480,14 @@ async function unpurchaseItem(itemId) {
     delete itemToMoveBack.listaOriginal;
     delete itemToMoveBack.listaOriginalNome;
     delete itemToMoveBack.categoriaOriginal;
-    delete itemToMoveBack.membros;
     
     const listRef = doc(db, "user_lists", listaOriginal);
     const listSnap = await getDoc(listRef);
-    if (!listSnap.exists()) return;
+    if (!listSnap.exists()) {
+        console.warn("A lista original foi apagada. Não é possível devolver o item.");
+        await deleteDoc(historyRef); // Remove o item do histórico se a lista não existe mais
+        return;
+    }
 
     const listData = listSnap.data();
     let targetCategory = listData.categorias.find(c => c.nomeCategoria === categoriaOriginal);
@@ -508,6 +507,51 @@ async function unpurchaseItem(itemId) {
 async function deleteList(listId) {
     await deleteDoc(doc(db, "user_lists", listId));
     modal.style.display = 'none';
+}
+
+async function deleteCategory(catIndex) {
+    const listRef = doc(db, "user_lists", currentListId);
+    const docSnap = await getDoc(listRef);
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        data.categorias.splice(catIndex, 1);
+        await updateDoc(listRef, { categorias: data.categorias });
+    }
+    modal.style.display = 'none';
+}
+
+async function deleteItem(catIndex, itemIndex) {
+    const listRef = doc(db, "user_lists", currentListId);
+    const docSnap = await getDoc(listRef);
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        data.categorias[catIndex].itens.splice(itemIndex, 1);
+        await updateDoc(listRef, { categorias: data.categorias });
+    }
+    modal.style.display = 'none';
+}
+
+async function saveItem(catIndex, itemIndex, newText, newPrice) {
+    const listRef = doc(db, "user_lists", currentListId);
+    const docSnap = await getDoc(listRef);
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        data.categorias[catIndex].itens[itemIndex].texto = newText;
+        data.categorias[catIndex].itens[itemIndex].preco = newPrice;
+        await updateDoc(listRef, { categorias: data.categorias });
+    }
+}
+
+async function handleReorderItems(catIndex, oldIndex, newIndex) {
+    const listRef = doc(db, "user_lists", currentListId);
+    const docSnap = await getDoc(listRef);
+    if(docSnap.exists()) {
+        const data = docSnap.data();
+        const category = data.categorias[catIndex];
+        const [movedItem] = category.itens.splice(oldIndex, 1);
+        category.itens.splice(newIndex, 0, movedItem);
+        await updateDoc(listRef, { categorias: data.categorias });
+    }
 }
 
 function showConfirmationModal(title, message, onConfirm) {
