@@ -25,6 +25,8 @@ let currentUser = null;
 let currentListId = null;
 let unsubscribeFromList = null;
 let allUserLists = [];
+let gastosMensaisChart = null;
+let gastosCategoriaChart = null;
 
 // Elementos da UI
 const loginView = document.getElementById('login-view');
@@ -43,6 +45,14 @@ const tabsContainer = document.getElementById('tabs-container');
 const listContainer = document.getElementById('list-container');
 const mainTitle = document.getElementById('main-title');
 const totalGeralContainer = document.getElementById('total-geral-container');
+const orcamentoContainer = document.getElementById('orcamento-container');
+const orcamentoValores = document.getElementById('orcamento-valores');
+const orcamentoBarra = document.getElementById('orcamento-barra');
+const orcamentoInput = document.getElementById('orcamento-input');
+const salvarOrcamentoBtn = document.getElementById('salvar-orcamento-btn');
+const dashboardView = document.getElementById('dashboard-view');
+const listView = document.getElementById('list-view');
+const dashboardMonthFilter = document.getElementById('dashboard-month-filter');
 
 // --- LÓGICA DE AUTENTICAÇÃO ---
 setPersistence(auth, browserLocalPersistence).then(() => {
@@ -65,49 +75,28 @@ setPersistence(auth, browserLocalPersistence).then(() => {
     loginBtn.addEventListener('click', () => signInWithPopup(auth, provider));
 });
 
+
 // --- LÓGICA PRINCIPAL DO APP ---
-async function setupGlobalDefaultLists() {
-    const defaultListsQuery = query(collection(db, "user_lists"), where("isDefault", "==", true));
-    const querySnapshot = await getDocs(defaultListsQuery);
-
-    if (querySnapshot.empty) {
-        const defaultLists = [
-            { id: 'mercado', nome: 'Mercado', categorias: [ { nomeCategoria: "Mercearia", itens: [] }, { nomeCategoria: "Hortifruti", itens: [] }, { nomeCategoria: "Açougue e Frios", itens: [] }, { nomeCategoria: "Produtos de Limpeza", itens: [] }, { nomeCategoria: "Higiene Pessoal", itens: [] } ] },
-            { id: 'casa', nome: 'Casa', categorias: [ { nomeCategoria: "Cozinha", itens: [] }, { nomeCategoria: "Quarto", itens: [] }, { nomeCategoria: "Sala", itens: [] }, { nomeCategoria: "Banheiro", itens: [] }, { nomeCategoria: "Escritório", itens: [] } ] },
-            { id: 'roupas', nome: 'Roupas', categorias: [ { nomeCategoria: "Giovanna", itens: [] }, { nomeCategoria: "Tales", itens: [] } ] }
-        ];
-
-        const batch = writeBatch(db);
-        for (const list of defaultLists) {
-            const listRef = doc(db, "user_lists", list.id);
-            batch.set(listRef, {
-                nome: list.nome,
-                criadoEm: serverTimestamp(),
-                criadoPor: { uid: "system", nome: "Sistema" },
-                categorias: list.categorias,
-                isDefault: true
-            });
-        }
-        await batch.commit();
-    }
-}
-
 function initializeAppLogic() {
     cancelDeleteBtn.addEventListener('click', () => modal.style.display = 'none');
+    salvarOrcamentoBtn.addEventListener('click', handleSalvarOrcamento);
 
     appView.addEventListener('submit', (e) => {
+        e.preventDefault();
         if (e.target.id === 'add-category-form') handleAddCategory(e);
         if (e.target.id === 'add-item-form') handleAddItem(e);
+        if (e.target.id === 'create-list-form') handleCreateList(e);
     });
 
     const q = query(collection(db, "user_lists"), orderBy("criadoEm"));
     onSnapshot(q, (snapshot) => {
         allUserLists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderNavigation();
-        if (currentListId && !allUserLists.find(l => l.id === currentListId)) {
-            handleTabClick(allUserLists[0]?.id || 'historico');
+        const firstTabId = 'dashboard'; // Sempre começa na dashboard
+        if (currentListId && !allUserLists.find(l => l.id === currentListId) && currentListId !== 'dashboard' && currentListId !== 'historico') {
+            handleTabClick(firstTabId);
         } else if (!currentListId) {
-            handleTabClick(allUserLists[0]?.id || 'historico');
+            handleTabClick(firstTabId);
         }
     });
 }
@@ -115,6 +104,13 @@ function initializeAppLogic() {
 function renderNavigation() {
     tabsContainer.innerHTML = '';
     
+    const dashboardTab = document.createElement('button');
+    dashboardTab.className = 'tab-btn py-3 px-4 text-center font-semibold rounded-lg transition-colors text-gray-500 flex-shrink-0';
+    dashboardTab.dataset.listId = 'dashboard';
+    dashboardTab.textContent = 'Dashboard';
+    dashboardTab.addEventListener('click', () => handleTabClick('dashboard'));
+    tabsContainer.appendChild(dashboardTab);
+
     allUserLists.forEach(list => {
         const tab = document.createElement('button');
         tab.className = 'tab-btn flex items-center gap-2 py-3 px-4 text-center font-semibold rounded-lg transition-colors text-gray-600';
@@ -146,7 +142,6 @@ function renderNavigation() {
         </button>
     `;
     tabsContainer.appendChild(createListForm);
-    createListForm.addEventListener('submit', handleCreateList);
     
     const historyTab = document.createElement('button');
     historyTab.className = 'tab-btn py-3 px-4 text-center font-semibold rounded-lg transition-colors text-gray-500 flex-shrink-0';
@@ -159,7 +154,9 @@ function renderNavigation() {
 }
 
 function handleTabClick(listId) {
-    if (listId === 'historico') {
+    if (listId === 'dashboard') {
+        loadDashboard();
+    } else if (listId === 'historico') {
         loadHistory();
     } else {
         loadList(listId);
@@ -171,15 +168,15 @@ function updateActiveTabUI() {
         const isCurrent = tab.dataset.listId === currentListId;
         tab.classList.toggle('bg-blue-600', isCurrent);
         tab.classList.toggle('text-white', isCurrent);
-        tab.classList.toggle('text-gray-600', !isCurrent && tab.dataset.listId !== 'historico');
-        tab.classList.toggle('text-gray-500', !isCurrent && tab.dataset.listId === 'historico');
+        tab.classList.toggle('text-gray-600', !isCurrent && !['dashboard', 'historico'].includes(tab.dataset.listId));
+        tab.classList.toggle('text-gray-500', !isCurrent && ['dashboard', 'historico'].includes(tab.dataset.listId));
     });
 }
 
 async function loadList(listId) {
-    formsSection.style.display = 'block';
-    historyFilters.style.display = 'none';
-    totalGeralContainer.style.display = 'block';
+    listView.style.display = 'block';
+    dashboardView.style.display = 'none';
+    
     if (unsubscribeFromList) unsubscribeFromList();
     currentListId = listId;
     updateActiveTabUI();
@@ -195,13 +192,19 @@ async function loadList(listId) {
 }
 
 async function loadHistory() {
-    formsSection.style.display = 'none';
-    historyFilters.style.display = 'block';
-    totalGeralContainer.style.display = 'none';
+    listView.style.display = 'block';
+    dashboardView.style.display = 'none';
+    
     if (unsubscribeFromList) unsubscribeFromList();
     currentListId = 'historico';
     updateActiveTabUI();
     mainTitle.textContent = 'Histórico de Compras';
+    
+    // Esconde os elementos que não pertencem ao histórico
+    orcamentoContainer.style.display = 'none';
+    formsSection.style.display = 'none';
+    historyFilters.style.display = 'block';
+    totalGeralContainer.style.display = 'none';
     
     listContainer.innerHTML = `<p class="text-gray-500 p-4 text-center">Carregando histórico...</p>`;
     const historyQuery = query(collection(db, "historico"), orderBy("compradoEm", "desc"));
@@ -211,11 +214,120 @@ async function loadHistory() {
     });
 }
 
+// --- LÓGICA DA DASHBOARD ---
+async function loadDashboard() {
+    if (unsubscribeFromList) unsubscribeFromList();
+    currentListId = 'dashboard';
+    mainTitle.textContent = 'Dashboard Financeira';
+    
+    listView.style.display = 'none';
+    dashboardView.style.display = 'block';
+    updateActiveTabUI();
+
+    const historyQuery = query(collection(db, "historico"), orderBy("compradoEm", "asc"));
+    const querySnapshot = await getDocs(historyQuery);
+    const historyItems = querySnapshot.docs.map(doc => doc.data());
+
+    if (historyItems.length === 0) {
+        dashboardView.innerHTML = `<p class="text-gray-500 p-4 text-center">Ainda não há dados no histórico para exibir a dashboard.</p>`;
+        return;
+    }
+
+    renderGastosMensais(historyItems);
+    renderGastosPorCategoria(historyItems);
+}
+
+function renderGastosMensais(items) {
+    const gastosPorMes = items.reduce((acc, item) => {
+        const mesAno = item.compradoEm.toDate().toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+        if (!acc[mesAno]) acc[mesAno] = 0;
+        acc[mesAno] += item.preco || 0;
+        return acc;
+    }, {});
+
+    const labels = Object.keys(gastosPorMes);
+    const data = Object.values(gastosPorMes);
+
+    const ctx = document.getElementById('gastos-mensais-chart').getContext('2d');
+    if (gastosMensaisChart) gastosMensaisChart.destroy();
+    
+    gastosMensaisChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Gasto (R$)',
+                data: data,
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: { scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false }
+    });
+}
+
+function renderGastosPorCategoria(items) {
+    const mesesDisponiveis = [...new Set(items.map(item => item.compradoEm.toDate().toLocaleString('pt-BR', { month: 'long', year: 'numeric' })))];
+    
+    dashboardMonthFilter.innerHTML = '';
+    mesesDisponiveis.forEach(mes => {
+        const option = document.createElement('option');
+        option.value = mes;
+        option.textContent = mes.charAt(0).toUpperCase() + mes.slice(1);
+        dashboardMonthFilter.appendChild(option);
+    });
+    
+    const mesAtual = new Date().toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    dashboardMonthFilter.value = mesesDisponiveis.includes(mesAtual) ? mesAtual : mesesDisponiveis[mesesDisponiveis.length - 1];
+
+    const updateChart = () => {
+        const mesSelecionado = dashboardMonthFilter.value;
+        const itemsDoMes = items.filter(item => item.compradoEm.toDate().toLocaleString('pt-BR', { month: 'long', year: 'numeric' }) === mesSelecionado);
+
+        const gastosPorCategoria = itemsDoMes.reduce((acc, item) => {
+            const categoria = item.categoriaOriginal || 'Outros';
+            if (!acc[categoria]) acc[categoria] = 0;
+            acc[categoria] += item.preco || 0;
+            return acc;
+        }, {});
+
+        const labels = Object.keys(gastosPorCategoria);
+        const data = Object.values(gastosPorCategoria);
+
+        const ctx = document.getElementById('gastos-categoria-chart').getContext('2d');
+        if (gastosCategoriaChart) gastosCategoriaChart.destroy();
+        
+        gastosCategoriaChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: ['rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'],
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    };
+    
+    dashboardMonthFilter.removeEventListener('change', updateChart);
+    dashboardMonthFilter.addEventListener('change', updateChart);
+    updateChart();
+}
+
+
+// --- Funções de Renderização e CRUD (com ajustes) ---
 function renderListData(data) {
+    // Mostra os elementos corretos para a vista de lista
+    orcamentoContainer.style.display = 'block';
+    formsSection.style.display = 'block';
+    historyFilters.style.display = 'none';
+    totalGeralContainer.style.display = 'block';
+
     const totalGeralValor = document.getElementById('total-geral-valor');
     listContainer.innerHTML = '';
     let totalGeral = 0;
-
     const categorySelector = document.getElementById('category-selector');
     categorySelector.innerHTML = '';
 
@@ -227,7 +339,6 @@ function renderListData(data) {
 
         const categoryDiv = document.createElement('div');
         categoryDiv.className = 'mb-6 fade-in';
-
         const totalCategoria = (categoria.itens || []).reduce((sum, item) => sum + (item.preco || 0), 0);
         totalGeral += totalCategoria;
 
@@ -247,8 +358,86 @@ function renderListData(data) {
     });
     
     totalGeralValor.textContent = `R$ ${totalGeral.toFixed(2).replace('.', ',')}`;
+    
+    const orcamento = data.orcamento || 0;
+    orcamentoInput.value = orcamento > 0 ? orcamento : '';
+    orcamentoValores.textContent = `R$ ${totalGeral.toFixed(2).replace('.', ',')} / R$ ${orcamento.toFixed(2).replace('.', ',')}`;
+    
+    let percentualGasto = orcamento > 0 ? (totalGeral / orcamento) * 100 : 0;
+    
+    orcamentoBarra.style.width = `${Math.min(percentualGasto, 100)}%`;
+    orcamentoBarra.classList.remove('bg-blue-600', 'bg-yellow-400', 'bg-red-600');
+    if (percentualGasto > 100) orcamentoBarra.classList.add('bg-red-600');
+    else if (percentualGasto > 75) orcamentoBarra.classList.add('bg-yellow-400');
+    else orcamentoBarra.classList.add('bg-blue-600');
+
     listContainer.removeEventListener('click', handleListClick);
     listContainer.addEventListener('click', handleListClick);
+}
+
+// O resto do seu código (setupGlobalDefaultLists, handleSalvarOrcamento, handleCreateList, etc.) permanece o mesmo.
+// Cole o restante do seu ficheiro aqui para garantir a completude.
+// ...
+
+async function setupGlobalDefaultLists() {
+    const defaultListsQuery = query(collection(db, "user_lists"), where("isDefault", "==", true));
+    const querySnapshot = await getDocs(defaultListsQuery);
+
+    if (querySnapshot.empty) {
+        const defaultLists = [
+            { id: 'mercado', nome: 'Mercado', categorias: [ { nomeCategoria: "Mercearia", itens: [] }, { nomeCategoria: "Hortifruti", itens: [] }, { nomeCategoria: "Açougue e Frios", itens: [] }, { nomeCategoria: "Produtos de Limpeza", itens: [] }, { nomeCategoria: "Higiene Pessoal", itens: [] } ] },
+            { id: 'casa', nome: 'Casa', categorias: [ { nomeCategoria: "Cozinha", itens: [] }, { nomeCategoria: "Quarto", itens: [] }, { nomeCategoria: "Sala", itens: [] }, { nomeCategoria: "Banheiro", itens: [] }, { nomeCategoria: "Escritório", itens: [] } ] },
+            { id: 'roupas', nome: 'Roupas', categorias: [ { nomeCategoria: "Giovanna", itens: [] }, { nomeCategoria: "Tales", itens: [] } ] }
+        ];
+
+        const batch = writeBatch(db);
+        for (const list of defaultLists) {
+            const listRef = doc(db, "user_lists", list.id);
+            batch.set(listRef, {
+                nome: list.nome,
+                criadoEm: serverTimestamp(),
+                criadoPor: { uid: "system", nome: "Sistema" },
+                categorias: list.categorias,
+                isDefault: true,
+                orcamento: 0
+            });
+        }
+        await batch.commit();
+    }
+}
+
+async function handleSalvarOrcamento() {
+    const novoOrcamento = parseFloat(orcamentoInput.value);
+    if (isNaN(novoOrcamento) || novoOrcamento < 0) {
+        alert("Por favor, insira um valor de orçamento válido.");
+        return;
+    }
+
+    const listRef = doc(db, "user_lists", currentListId);
+    await updateDoc(listRef, {
+        orcamento: novoOrcamento
+    });
+    
+    salvarOrcamentoBtn.textContent = "Salvo!";
+    setTimeout(() => {
+        salvarOrcamentoBtn.textContent = "Salvar";
+    }, 1500);
+}
+
+async function handleCreateList(e) {
+    const input = document.getElementById('new-list-name');
+    const listName = input.value.trim();
+    if (!listName) return;
+
+    await addDoc(collection(db, "user_lists"), {
+        nome: listName,
+        criadoEm: serverTimestamp(),
+        criadoPor: { uid: currentUser.uid, nome: currentUser.displayName },
+        categorias: [],
+        isDefault: false,
+        orcamento: 0
+    });
+    input.value = '';
 }
 
 function renderHistoryData(historyItems) {
@@ -387,24 +576,7 @@ async function handleListClick(e) {
     }
 }
 
-async function handleCreateList(e) {
-    e.preventDefault();
-    const input = document.getElementById('new-list-name');
-    const listName = input.value.trim();
-    if (!listName) return;
-
-    await addDoc(collection(db, "user_lists"), {
-        nome: listName,
-        criadoEm: serverTimestamp(),
-        criadoPor: { uid: currentUser.uid, nome: currentUser.displayName },
-        categorias: [],
-        isDefault: false
-    });
-    input.value = '';
-}
-
 async function handleAddItem(e) {
-    e.preventDefault();
     if (!currentUser) return;
     const textInput = document.getElementById('item-text');
     const priceInput = document.getElementById('item-price');
@@ -428,7 +600,6 @@ async function handleAddItem(e) {
 }
 
 async function handleAddCategory(e) {
-    e.preventDefault();
     const categoryInput = document.getElementById('category-name');
     const nomeCategoria = categoryInput.value.trim();
     if (!nomeCategoria) return;
@@ -485,7 +656,7 @@ async function unpurchaseItem(itemId) {
     const listSnap = await getDoc(listRef);
     if (!listSnap.exists()) {
         console.warn("A lista original foi apagada. Não é possível devolver o item.");
-        await deleteDoc(historyRef); // Remove o item do histórico se a lista não existe mais
+        await deleteDoc(historyRef);
         return;
     }
 
@@ -542,7 +713,11 @@ async function saveItem(catIndex, itemIndex, newText, newPrice) {
     }
 }
 
-async function handleReorderItems(catIndex, oldIndex, newIndex) {
+async function handleReorderItems(evt) {
+    const catIndex = evt.from.dataset.catIndex;
+    const oldIndex = evt.oldIndex;
+    const newIndex = evt.newIndex;
+    
     const listRef = doc(db, "user_lists", currentListId);
     const docSnap = await getDoc(listRef);
     if(docSnap.exists()) {
